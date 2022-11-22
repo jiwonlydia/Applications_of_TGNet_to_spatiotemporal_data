@@ -30,10 +30,11 @@ ex)  30분 단위의 기존 데이터를 2시간 단위로 sampling하려면 STA
 ---
 #### References
 - 본 프로젝트 및 코드는 논문 [Forecasting taxi demands with fully convolutional networks and temporal guided embedding](https://openreview.net/pdf?id=BygF00DuiX) 및 저자의 [코드](https://github.com/jiwonlydia/TGGNet-keras)를 참조하였다.
-
+```
 @article{lee2019demand,
   title={Demand Forecasting from Spatiotemporal Data with Graph Networks ans Temporal-Guided Embedding},
   author={Lee, Doyup and Jung, Suehun and Cheon, Yeongjae and Kim, Dongil and You, Seungil},
   journal={arXiv preprint arXiv:1905.10709},
   year={2019}
 }
+```
