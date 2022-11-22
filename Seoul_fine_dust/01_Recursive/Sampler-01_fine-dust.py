@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import os
 
 train_dataset = np.load('../data_preprocessed/train_image_dust.npy')
 test_dataset = np.load('../data_preprocessed/test_image_dust.npy')
@@ -89,6 +90,9 @@ stamp_list = time_unit
 step_list = [int(24/i) for i in stamp_list]
 lag_list = [2*(i+1) for i in range(12)]
 
+if not os.path.exists('./data'):
+    os.mkdir('./data')
+    
 for i in range(len(time_unit)): # time unit에 따라
     for j in range(len(lag_list)): # lag에 따라
         print(f'STAMP={stamp_list[i]}, LAG={lag_list[j]}, STEP={step_list[i]}')

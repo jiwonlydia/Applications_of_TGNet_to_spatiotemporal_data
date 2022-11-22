@@ -46,7 +46,7 @@ parser.add_argument('--scale', type=str, default='min_max')
 parser.add_argument('--dataset_name', type=str, default='NYC')
 parser.add_argument('--thr', type=int, default=10)
 parser.add_argument('--alpha', type=float, default=0.05)
-parser.add_argument('--num_gpu', type=int, default=1)
+parser.add_argument('--num_gpu', type=int, default=0)
 # parser.add_argument('--coord', type=float, default=25.0)
 # parser.add_argument('--coord_net', type=int, default=2)
 
@@ -289,19 +289,19 @@ def train(STAMP, LAG, STEP):
     
     print('===== START TRAINGING =====')
     
-#     with tf.device('/CPU:0'): # 텐서를 CPU에 할당
+
     best_eval_loss = 100000
     patience = 0
 
     for idx in range(args.epoch): # epoch
         if idx%100 == 0:
             print(f'Epoch = {idx}')
-            
-        model.fit([x_train, temporal_train], y_train, 
-                  batch_size=args.batch, epochs=1, shuffle=True,verbose=0)
+        with tf.device(f'/GPU:{args.num_gpu}'):    
+            model.fit([x_train, temporal_train], y_train, 
+                      batch_size=args.batch, epochs=1, shuffle=True,verbose=0)
 
-        eval_loss = model.evaluate([x_valid, temporal_valid], y_valid, 
-                                   batch_size=args.batch, verbose=0)
+            eval_loss = model.evaluate([x_valid, temporal_valid], y_valid, 
+                                       batch_size=args.batch, verbose=0)
         patience += 1
         if patience > args.patience:
             break
@@ -329,10 +329,6 @@ def save_test_output(pred_inverse, y_inverse, output_path=None):
     num_row, h, w = pred_inverse.shape[:3]
     num_col = int(h*w)
     assert pred_inverse.shape[:3] == y_inverse.shape[:3]
-    if output_path == None:
-        output_path = './model_output/temporal_directory'
-        print("[!] Please Assign Output Path in Arguments")
-
     np_pred = flatten_result(pred_inverse) #np.reshape(pred_inverse, [num_row, num_col])
     np_y = flatten_result(y_inverse) #np.reshape(y_inverse, [num_row, num_col])
 
@@ -352,18 +348,22 @@ def save_test_output(pred_inverse, y_inverse, output_path=None):
 
 def single_step_forecast(STAMP, LAG):
     # Load saved model
-    model = tf.keras.models.load_model(f'./model_saved/best_model_stamp{STAMP}_lag{LAG}.h5')
+    with tf.device(f'/GPU:{args.num_gpu}'):
+        model = tf.keras.models.load_model(f'./model_saved/best_model_stamp{STAMP}_lag{LAG}.h5')
     print(f'Model Loaded: best_model_stamp{STAMP}_lag{LAG}.h5')
     
     min_x, max_x = get_min_max(load_np_data(f'./data/x_train_stamp{STAMP}_lag{LAG}.npz'), 'min_max')
     x_test, temporal_test, y_test = LoadData(STAMP=STAMP, LAG=LAG, STEP=1, train=False, valid=False)
     
     temporal_test_step1 = temporal_test[:,0,:]
-    y_pred =  model.predict([x_test, temporal_test_step1]) ; print(y_pred.sum())
+    with tf.device(f'/GPU:{args.num_gpu}'):
+        y_pred =  model.predict([x_test, temporal_test_step1]) ; print(y_pred.sum())
     y_true = np.expand_dims(y_test[:,:,:,0], axis=-1)
     y_pred_inv = scaler(y_pred, 'min_max', inv=True, min_value=min_x, max_value=max_x)
-    y_true_inv = scaler(y_true, 'min_max', inv=True, min_value=min_x, max_value=max_x)    
-    save_test_output(y_pred_inv, y_true_inv, output_path=f'./output/predictions/stamp{STAMP}_lag{LAG}_step1')
+    y_true_inv = scaler(y_true, 'min_max', inv=True, min_value=min_x, max_value=max_x)
+    if not os.path.exists('./output'):
+        os.mkdir('./output')
+    save_test_output(y_pred_inv, y_true_inv, output_path='./output/stamp{STAMP}_lag{LAG}_step1')
     RMSE = rmse(y_true_inv, y_pred_inv)
     print(RMSE)
     return RMSE
@@ -375,7 +375,8 @@ def single_step_forecast(STAMP, LAG):
 def recursive_forecast(STAMP, LAG, STEP):
     
     # Load saved model
-    model = tf.keras.models.load_model(f'./model_saved/best_model_stamp{STAMP}_lag{LAG}.h5')
+    with tf.device(f'/GPU:{args.num_gpu}'):
+        model = tf.keras.models.load_model(f'./model_saved/best_model_stamp{STAMP}_lag{LAG}.h5')
     print(f'Model Loaded: best_model_stamp{STAMP}_lag{LAG}.h5')
     min_x, max_x = get_min_max(load_np_data(f'./data/x_train_stamp{STAMP}_lag{LAG}.npz'), 'min_max')
     x_test, temporal_test, y_test = LoadData(STAMP=STAMP, LAG=LAG, STEP=STEP, train=False, valid=False)
@@ -384,12 +385,15 @@ def recursive_forecast(STAMP, LAG, STEP):
 
     # Single-Step Forecast
     temporal_test_step1 = temporal_test[:,0,:]
-    y_pred =  model.predict([x_test, temporal_test_step1])
+    with tf.device(f'/GPU:{args.num_gpu}'):
+        y_pred =  model.predict([x_test, temporal_test_step1])
     y_true = np.expand_dims(y_test[:,:,:,0], axis=-1)
 
     y_pred_inv = scaler(y_pred, 'min_max', inv=True, min_value=min_x, max_value=max_x)
     y_true_inv = scaler(y_true, 'min_max', inv=True, min_value=min_x, max_value=max_x)    
-    save_test_output(y_pred_inv, y_true_inv, output_path=f'./output/predictions/stamp{STAMP}_lag{LAG}_step1')
+    if not os.path.exists('./output'):
+        os.mkdir('./output')
+    save_test_output(y_pred_inv, y_true_inv, output_path=f'./output/stamp{STAMP}_lag{LAG}_step1')
     
     RMSE = rmse(y_true_inv, y_pred_inv)
     rmse_list.append(RMSE)
@@ -405,23 +409,22 @@ def recursive_forecast(STAMP, LAG, STEP):
         else:
             x_test_new = np.concatenate([x_test[:,:,:,h-1:], y_pred_new], axis=-1)
         print(x_test_new.shape)
-    #     with tf.device('/CPU:0'): # 텐서를 CPU에 할당
-        y_pred = model.predict([x_test_new, temporal_test_h])
+        with tf.device(f'/GPU:{args.num_gpu}'):
+            y_pred = model.predict([x_test_new, temporal_test_h])
         y_pred_new = np.concatenate([y_pred_new, y_pred], axis=-1)
         y_true = np.expand_dims(y_test[:,:,:,h-1], axis=-1)
 
         y_pred_inv = scaler(y_pred, 'min_max', inv=True, min_value=min_x, max_value=max_x)
         y_true_inv = scaler(y_true, 'min_max', inv=True, min_value=min_x, max_value=max_x)
-        save_test_output(y_pred_inv, y_true_inv, output_path=f'./output/predictions/stamp{STAMP}_lag{LAG}_step{h}')
+        if not os.path.exists('./output'):
+            os.mkdir('./output')
+        save_test_output(y_pred_inv, y_true_inv, output_path=f'./output/stamp{STAMP}_lag{LAG}_step{h}')
         RMSE = rmse(y_true_inv, y_pred_inv)
         rmse_list.append(RMSE)
         print(f'RMSE of {h}-Step Forecast = {RMSE:3.3f}')
-        
-        if not os.path.exists('./output/metric'):
-            os.mkdir('./output/metric')
-        index = np.arange(0, len(rmse_list))
-        df_rmse = pd.DataFrame(rmse_list, columns=['RMSE'], index=index)
-        df_rmse.to_csv('./output/metric/' + f'rmse_stamp{STAMP}_lag{LAG}_step{STEP}.csv')
+#         index = np.arange(0, len(rmse_list))
+#         df_rmse = pd.DataFrame(rmse_list, columns=['RMSE'], index=index)
+#         df_rmse.to_csv('./output/metric/' + f'rmse_stamp{STAMP}_lag{LAG}_step{STEP}.csv')
         
     print('#'*57)
     print(f'###  RMSE of STAMP {STAMP} LAG {LAG} STEP {STEP} = {rmse_list[-1]} ###')
