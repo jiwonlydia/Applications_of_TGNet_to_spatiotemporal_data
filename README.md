@@ -1,7 +1,6 @@
 # Applications_of_TGNet_to_spatiotemporal_data
 
 ## Usage
----
 ### 1. Run preprocess_fine-dust.py
 ```
 >>> python preprocess_fine-dust.py
